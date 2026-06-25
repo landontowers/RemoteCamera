@@ -43,6 +43,9 @@ class ControllerConnection(private val context: Context) {
     private val _currentZoom = MutableStateFlow<Float>(1.0f)
     val currentZoom = _currentZoom.asStateFlow()
 
+    private val _zoomPresets = MutableStateFlow<List<Float>>(listOf(0.5f, 1.0f, 2.0f, 5.0f))
+    val zoomPresets = _zoomPresets.asStateFlow()
+
     private val _cameraRotation = MutableStateFlow<Int>(0)
     val cameraRotation = _cameraRotation.asStateFlow()
 
@@ -302,6 +305,14 @@ class ControllerConnection(private val context: Context) {
                                         val zoomVal = statusMessage.removePrefix("ZOOM_VAL:").toFloatOrNull()
                                         if (zoomVal != null) {
                                             _currentZoom.value = zoomVal
+                                        }
+                                    }
+                                    statusMessage.startsWith("ZOOM_PRESETS:") -> {
+                                        val listStr = statusMessage.removePrefix("ZOOM_PRESETS:")
+                                        val presets = listStr.split(",")
+                                            .mapNotNull { it.toFloatOrNull() }
+                                        if (presets.isNotEmpty()) {
+                                            _zoomPresets.value = presets
                                         }
                                     }
                                     statusMessage.startsWith("TORCH_STATE:") -> {

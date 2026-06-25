@@ -109,6 +109,7 @@ fun ControllerModeScreen(
   val isCharging by controllerConnection.isCharging.collectAsState()
   val diskSpace by controllerConnection.diskSpace.collectAsState()
   val isTorchOn by controllerConnection.isTorchOn.collectAsState()
+  val zoomPresets by controllerConnection.zoomPresets.collectAsState()
 
   var showInstructions by remember { mutableStateOf(false) }
 
@@ -566,7 +567,7 @@ fun ControllerModeScreen(
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                  listOf(0.5f, 1.0f, 2.0f, 5.0f).forEach { preset ->
+                  zoomPresets.forEach { preset ->
                     if (preset in minZoom..maxZoom) {
                       Box(
                         modifier = Modifier

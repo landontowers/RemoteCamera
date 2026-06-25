@@ -15,6 +15,9 @@ import android.os.Build
 import android.os.IBinder
 import android.provider.MediaStore
 import android.util.Log
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
+import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.annotation.OptIn
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
@@ -391,6 +394,73 @@ class CameraService : Service(), LifecycleOwner {
         }, ContextCompat.getMainExecutor(this))
     }
 
+    @OptIn(androidx.camera.camera2.interop.ExperimentalCamera2Interop::class)
+    private fun getPhysicalZoomPresets(cameraInfo: androidx.camera.core.CameraInfo): List<Float> {
+        val presets = mutableListOf<Float>()
+        try {
+            val camera2Info = Camera2CameraInfo.from(cameraInfo)
+            val logicalCameraId = camera2Info.cameraId
+            val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            val characteristics = cameraManager.getCameraCharacteristics(logicalCameraId)
+            
+            // Query logical camera focal lengths
+            val focalLengths = mutableListOf<Float>()
+            val logicalFocalLengths = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+            if (logicalFocalLengths != null) {
+                focalLengths.addAll(logicalFocalLengths.toList())
+            }
+            
+            // Query physical sub-cameras focal lengths (if any)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val physicalCameraIds = characteristics.physicalCameraIds
+                for (physicalId in physicalCameraIds) {
+                    val physicalSpecs = cameraManager.getCameraCharacteristics(physicalId)
+                    val lengths = physicalSpecs.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+                    if (lengths != null) {
+                        focalLengths.addAll(lengths.toList())
+                    }
+                }
+            }
+            
+            val uniqueFocalLengths = focalLengths.distinct().sorted()
+            if (uniqueFocalLengths.isNotEmpty()) {
+                // Baseline standard focal length (normally between 3.5mm and 6.0mm)
+                val baseline = uniqueFocalLengths.firstOrNull { it in 3.5f..6.0f }
+                    ?: uniqueFocalLengths.firstOrNull { it >= 3.0f }
+                    ?: uniqueFocalLengths.first()
+                
+                for (f in uniqueFocalLengths) {
+                    val ratio = f / baseline
+                    // Round to one decimal place, e.g. 0.5, 1.0, 3.0, 5.0, 10.0
+                    val roundedRatio = Math.round(ratio * 10f) / 10f
+                    if (roundedRatio > 0.1f && !presets.contains(roundedRatio)) {
+                        presets.add(roundedRatio)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error calculating physical zoom presets", e)
+        }
+        
+        // Ensure 1.0f is always present
+        if (!presets.contains(1.0f)) {
+            presets.add(1.0f)
+        }
+        
+        // Add helpful digital zoom levels (e.g., 2.0x, 5.0x) if they fit inside bounds and are not covered
+        cameraInfo.zoomState.value?.let { state ->
+            val maxZoom = state.maxZoomRatio
+            if (maxZoom >= 2.0f && presets.none { Math.abs(it - 2.0f) < 0.2f }) {
+                presets.add(2.0f)
+            }
+            if (maxZoom >= 5.0f && presets.none { Math.abs(it - 5.0f) < 0.2f }) {
+                presets.add(5.0f)
+            }
+        }
+        
+        return presets.sorted()
+    }
+
     private fun sendCameraDetails() {
         val provider = cameraProvider ?: return
         val available = provider.availableCameraInfos
@@ -415,6 +485,8 @@ class CameraService : Service(), LifecycleOwner {
                 sendFeedbackToClient("ZOOM_LIMITS:${state.minZoomRatio}:${state.maxZoomRatio}")
                 sendFeedbackToClient("ZOOM_VAL:${state.zoomRatio}")
             }
+            val presets = getPhysicalZoomPresets(cam.cameraInfo)
+            sendFeedbackToClient("ZOOM_PRESETS:${presets.joinToString(",")}")
         }
     }
 
