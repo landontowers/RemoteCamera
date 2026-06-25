@@ -1,6 +1,6 @@
 # Remote Camera (P2P Lens Monitor & Controller)
 
-Remote Camera is a completely offline, zero-configuration P2P camera viewfinder, remote controller, and wireless media downloader. It allows one Android device (running GrapheneOS or Stock Android) to act as a **Camera Server** while another device acts as a **Controller**—communicating entirely over a local Wi-Fi Hotspot or shared local network with zero external internet dependencies.
+Remote Camera is a completely offline, zero-configuration P2P camera viewfinder, remote controller, and wireless media downloader. It allows one Android device to act as a **Camera Server** while another device acts as a **Controller**—communicating entirely over a local Wi-Fi Hotspot or shared local network with zero external internet dependencies.
 
 ---
 
@@ -64,7 +64,7 @@ All messaging is multiplexed inside the MJPEG stream boundaries (`--frame` multi
 2. No internet connection is needed.
 
 ### Steps:
-1. **Connect Devices:** Ensure both devices are connected to the same local Wi-Fi network. If no local Wi-Fi network is available (e.g. out in the field), simply turn on the Wi-Fi Hotspot on one device and connect the other device to it.
+1. **Configure Wi-Fi Hotspot:** Turn on the Wi-Fi hotspot on one device (A) and connect the second device (B) to it.
 2. **Run Server (Device A):**
    * Open the app.
    * Tap **Camera Server**.
