@@ -40,6 +40,29 @@ android {
     }
 }
 
+// Rename the generic app-<variant>.apk output to RemoteCamera.apk so it reflects
+// the app rather than the module name. Done as a post-build rename (rather than via
+// the Variant API's output-file property) since that API surface has been in churn
+// across recent AGP versions.
+androidComponents {
+    onVariants { variant ->
+        val variantNameCapitalized = variant.name.replaceFirstChar { it.uppercase() }
+        // Resolve the directory to a plain File at configuration time so the task
+        // action doesn't capture a live Project/layout reference (which the
+        // configuration cache disallows serializing).
+        val apkDir = layout.buildDirectory.dir("outputs/apk/${variant.name}").get().asFile
+        val renameTask = tasks.register("renameApk${variantNameCapitalized}") {
+            doLast {
+                apkDir.listFiles { f -> f.extension == "apk" && f.name != "RemoteCamera.apk" }
+                    ?.forEach { it.copyTo(File(apkDir, "RemoteCamera.apk"), overwrite = true); it.delete() }
+            }
+        }
+        afterEvaluate {
+            tasks.named("assemble$variantNameCapitalized") { finalizedBy(renameTask) }
+        }
+    }
+}
+
 kotlin {
     jvmToolchain(17)
 }

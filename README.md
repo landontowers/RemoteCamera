@@ -91,14 +91,14 @@ To build and compile the application locally:
 ```bash
 ./gradlew assembleDebug
 ```
-The compiled APK will be generated at `app/build/outputs/apk/debug/app-debug.apk`.
+The compiled APK will be generated at `app/build/outputs/apk/debug/RemoteCamera.apk`.
 
 ### Build Production (Release) APK
 To compile a signed production (release) version:
 ```bash
 ./gradlew assembleRelease
 ```
-The compiled release APK will be generated at `app/build/outputs/apk/release/app-release.apk`. It is automatically signed with the local debug signing key so you can install and test it directly on target devices.
+The compiled release APK will be generated at `app/build/outputs/apk/release/RemoteCamera.apk`. It is automatically signed with the local debug signing key so you can install and test it directly on target devices.
 
 ### Run Unit Tests
 ```bash
