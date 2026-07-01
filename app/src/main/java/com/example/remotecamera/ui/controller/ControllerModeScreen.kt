@@ -22,6 +22,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -92,6 +93,7 @@ import com.example.remotecamera.ui.main.NeonCyan
 import com.example.remotecamera.ui.main.NeonPurple
 import com.example.remotecamera.ui.main.TextPrimary
 import com.example.remotecamera.ui.main.TextSecondary
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private enum class CaptureMode { PHOTO, VIDEO }
@@ -190,6 +192,13 @@ fun ControllerModeScreen(
   // first composition so simply opening/connecting the screen doesn't buzz.
   val isFirstRecordingCheck = remember { mutableStateOf(true) }
   LaunchedEffect(isRecording) {
+    // Keep the local mode toggle truthful to the server's actual recording state —
+    // otherwise reconnecting (or a slow round-trip right after tapping the shutter)
+    // can leave captureMode stuck on PHOTO while the server is really recording,
+    // causing the next shutter tap to send TAKE_PHOTO instead of STOP_RECORDING.
+    if (isRecording) {
+      captureMode = CaptureMode.VIDEO
+    }
     if (isFirstRecordingCheck.value) {
       isFirstRecordingCheck.value = false
     } else {
@@ -197,13 +206,23 @@ fun ControllerModeScreen(
     }
   }
 
-  val displayStatus = when {
-    isRecording -> null // already shown via the REC badge, no need for a duplicate chip
-    cameraStatus.startsWith("RECORD_FINISHED") -> "Recording Saved"
-    cameraStatus.startsWith("PHOTO_SUCCESS") -> "Photo Saved!"
-    cameraStatus.startsWith("PHOTO_ERROR") -> "Photo Capture Failed"
-    cameraStatus.startsWith("RECORD_ERROR") -> "Recording Failed"
-    else -> null
+  // A genuinely transient toast: shows briefly on a new status, then clears itself,
+  // instead of persisting indefinitely until some other status happens to arrive.
+  var transientStatus by remember { mutableStateOf<String?>(null) }
+  LaunchedEffect(cameraStatus) {
+    val text = when {
+      isRecording -> null // already shown via the REC badge, no need for a duplicate chip
+      cameraStatus.startsWith("RECORD_FINISHED") -> "Recording Saved"
+      cameraStatus.startsWith("PHOTO_SUCCESS") -> "Photo Saved!"
+      cameraStatus.startsWith("PHOTO_ERROR") -> "Photo Capture Failed"
+      cameraStatus.startsWith("RECORD_ERROR") -> "Recording Failed"
+      else -> null
+    }
+    transientStatus = text
+    if (text != null) {
+      delay(2500)
+      transientStatus = null
+    }
   }
 
   val isConnected = connectionState is ControllerConnection.ConnectionState.Connected
@@ -225,18 +244,26 @@ fun ControllerModeScreen(
       .fillMaxSize()
       .background(DarkBg)
   ) {
-    // Background layer: live feed fit to the screen width at its true aspect ratio
+    // Background layer: live feed fit to the screen at its true aspect ratio
     // (letterboxed, not cropped/stretched), or a centered placeholder while scanning/connecting
     if (isConnected && viewfinderBitmap != null) {
       val bitmap = viewfinderBitmap!!
-      Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+      BoxWithConstraints(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        val bitmapAspect = bitmap.width.toFloat() / bitmap.height.toFloat()
+        // Prefer filling the width (letterboxed top/bottom) as usual, but if that
+        // would make the image taller than the viewport — e.g. a rotated frame whose
+        // width/height swapped into a very tall ratio — fit by height instead
+        // (pillarboxed) so the feed never overflows off-screen.
+        val fitsByWidth = maxWidth / bitmapAspect <= maxHeight
         Image(
           bitmap = bitmap.asImageBitmap(),
           contentDescription = "Viewfinder Stream",
-          contentScale = ContentScale.FillWidth,
-          modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(bitmap.width.toFloat() / bitmap.height.toFloat())
+          contentScale = ContentScale.Fit,
+          modifier = if (fitsByWidth) {
+            Modifier.fillMaxWidth().aspectRatio(bitmapAspect)
+          } else {
+            Modifier.fillMaxHeight().aspectRatio(bitmapAspect)
+          }
         )
       }
     } else if (connectionState is ControllerConnection.ConnectionState.Connecting) {
@@ -370,13 +397,16 @@ fun ControllerModeScreen(
       }
     }
 
-    // Top scrim for toolbar legibility over the feed
+    // Top scrim for toolbar legibility over the feed. Remembered since this composable
+    // recomposes on every new viewfinder frame (~150-300ms) and these gradients never change.
+    val topScrimBrush = remember { Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent)) }
+    val bottomScrimBrush = remember { Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.65f))) }
     Box(
       modifier = Modifier
         .fillMaxWidth()
         .height(140.dp)
         .align(Alignment.TopStart)
-        .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent)))
+        .background(topScrimBrush)
     )
 
     // Bottom scrim for control legibility over the feed
@@ -385,7 +415,7 @@ fun ControllerModeScreen(
         .fillMaxWidth()
         .fillMaxHeight(0.42f)
         .align(Alignment.BottomStart)
-        .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.65f))))
+        .background(bottomScrimBrush)
     )
 
     Column(
@@ -463,14 +493,14 @@ fun ControllerModeScreen(
             Spacer(modifier = Modifier.width(1.dp))
           }
 
-          AnimatedVisibility(visible = displayStatus != null, enter = fadeIn(), exit = fadeOut()) {
+          AnimatedVisibility(visible = transientStatus != null, enter = fadeIn(), exit = fadeOut()) {
             Box(
               modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
                 .background(Color.Black.copy(alpha = 0.6f))
                 .padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
-              Text(text = displayStatus ?: "", color = NeonCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+              Text(text = transientStatus ?: "", color = NeonCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             }
           }
         }
@@ -521,17 +551,21 @@ fun ControllerModeScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                   zoomPresets.forEach { preset ->
                     if (preset in minZoom..maxZoom) {
+                      // Hardware-reported zoom ratios rarely land bit-exact on a
+                      // requested preset value, so compare with a small tolerance
+                      // instead of exact Float equality.
+                      val isSelected = kotlin.math.abs(currentZoom - preset) < 0.05f
                       Box(
                         modifier = Modifier
                           .clip(RoundedCornerShape(8.dp))
-                          .background(if (currentZoom == preset) NeonCyan else Color.Black.copy(alpha = 0.4f))
-                          .border(1.dp, if (currentZoom == preset) NeonCyan else GlassBorder, RoundedCornerShape(8.dp))
+                          .background(if (isSelected) NeonCyan else Color.Black.copy(alpha = 0.4f))
+                          .border(1.dp, if (isSelected) NeonCyan else GlassBorder, RoundedCornerShape(8.dp))
                           .clickable { controllerConnection.sendCommand("SET_ZOOM:$preset") }
                           .padding(horizontal = 8.dp, vertical = 4.dp)
                       ) {
                         Text(
                           text = "${preset}x",
-                          color = if (currentZoom == preset) Color.Black else TextPrimary,
+                          color = if (isSelected) Color.Black else TextPrimary,
                           fontSize = 11.sp,
                           fontWeight = FontWeight.Bold
                         )
@@ -597,15 +631,21 @@ fun ControllerModeScreen(
               enabled = isConnected,
               pulseAlpha = alphaPulse,
               onClick = {
-                when (captureMode) {
-                  CaptureMode.PHOTO -> {
+                // isRecording (the server's confirmed state) always takes priority over
+                // the locally-selected mode: a recording in progress must always be
+                // stoppable, and must never be able to trigger TAKE_PHOTO underneath it,
+                // even if captureMode hasn't caught up yet (e.g. right after tapping
+                // "start" but before the server's confirmation round-trips back).
+                when {
+                  isRecording -> controllerConnection.sendCommand("STOP_RECORDING")
+                  captureMode == CaptureMode.PHOTO -> {
                     controllerConnection.sendCommand("TAKE_PHOTO")
                     coroutineScope.launch {
                       shutterFlashAlpha.snapTo(0.85f)
                       shutterFlashAlpha.animateTo(0f, tween(220))
                     }
                   }
-                  CaptureMode.VIDEO -> controllerConnection.sendCommand(if (isRecording) "STOP_RECORDING" else "START_RECORDING")
+                  captureMode == CaptureMode.VIDEO -> controllerConnection.sendCommand("START_RECORDING")
                 }
               }
             )

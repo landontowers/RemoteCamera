@@ -6,7 +6,7 @@ import android.net.nsd.NsdServiceInfo
 import android.os.Build
 import android.util.Log
 
-class NsdHelper(context: Context) {
+class NsdHelper(private val context: Context) {
     private val nsdManager = context.getSystemService(Context.NSD_SERVICE) as NsdManager
 
     private var registrationListener: NsdManager.RegistrationListener? = null
@@ -16,6 +16,21 @@ class NsdHelper(context: Context) {
         const val SERVICE_TYPE = "_remotecamera._tcp"
         const val SERVICE_NAME = "PoleCameraRemote"
         private const val TAG = "NsdHelper"
+        private const val PREFS_NAME = "nsd_helper_prefs"
+        private const val KEY_INSTANCE_ID = "device_instance_id"
+    }
+
+    // A short id generated once and persisted per app install, so two devices of the
+    // identical model don't broadcast an identical service name — the device picker's
+    // discovered-server list and its onServiceLost cleanup both key off this name being
+    // unique per physical device.
+    private fun getInstanceId(): String {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_INSTANCE_ID, null) ?: run {
+            val id = java.util.UUID.randomUUID().toString().take(6).uppercase()
+            prefs.edit().putString(KEY_INSTANCE_ID, id).apply()
+            id
+        }
     }
 
     // Callbacks for discovery
@@ -28,10 +43,11 @@ class NsdHelper(context: Context) {
     fun registerService(port: Int) {
         // Include the device model so multiple servers on the same network are
         // distinguishable in the controller's device picker instead of all showing
-        // up with the identical name.
+        // up with the identical name, and a per-install instance id so two devices
+        // of the same model don't collide on an identical name.
         val serviceInfo = NsdServiceInfo().apply {
             serviceType = SERVICE_TYPE
-            serviceName = "$SERVICE_NAME (${Build.MODEL})"
+            serviceName = "$SERVICE_NAME (${Build.MODEL}-${getInstanceId()})"
             setPort(port)
         }
 

@@ -260,7 +260,7 @@ fun CameraModeScreen(
       verticalAlignment = Alignment.CenterVertically
     ) {
       Text(
-        text = "Broadcasting as \"PoleCameraRemote (${android.os.Build.MODEL})\" via mDNS",
+        text = "Broadcasting as \"${com.example.remotecamera.net.NsdHelper.SERVICE_NAME} (${android.os.Build.MODEL})\" via mDNS",
         color = TextSecondary,
         fontSize = 11.sp
       )

@@ -515,6 +515,10 @@ class CameraService : Service(), LifecycleOwner {
     }
 
     private fun takePhoto() {
+        // Reject a stray photo request that arrives while a recording is already
+        // active — mirrors the same guard startRecording() uses, closing the race
+        // where a client's TAKE_PHOTO can cross in-flight with a just-started recording.
+        if (activeRecording != null) return
         val capture = imageCapture ?: return
         capture.flashMode = if (isFlashEnabled) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF
         val contentValues = ContentValues().apply {
@@ -583,6 +587,14 @@ class CameraService : Service(), LifecycleOwner {
                     isRecording.value = false
                     activeRecording = null
                     camera?.cameraControl?.enableTorch(false)
+                    // The torch was only ever turned on here because flash was enabled
+                    // for this recording; clear that preference and tell the client so
+                    // neither side thinks flash is still armed (which would otherwise
+                    // fire an unexpected flash pulse on the next photo capture).
+                    if (isFlashEnabled) {
+                        isFlashEnabled = false
+                        sendFeedbackToClient("TORCH_STATE:$isFlashEnabled")
+                    }
                     if (recordEvent.hasError()) {
                         systemMessage.value = "Recording failed: ${recordEvent.error}"
                         sendFeedbackToClient("RECORD_ERROR: ${recordEvent.error}")
