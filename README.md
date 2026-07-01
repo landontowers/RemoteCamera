@@ -1,6 +1,6 @@
 # Remote Camera (P2P Lens Monitor & Controller)
 
-Remote Camera is a completely offline, zero-configuration P2P camera viewfinder, remote controller, and wireless media downloader. It allows one Android device to act as a **Camera Server** while another device acts as a **Controller**—communicating entirely over a local Wi-Fi Hotspot or shared local network with zero external internet dependencies.
+Remote Camera is a completely offline, zero-configuration P2P camera viewfinder, remote controller, and wireless media downloader. It allows one Android device to act as a **Camera Server** while another device acts as a **Controller**—communicating entirely over a local network with zero external internet dependencies. That local network can be an existing Wi-Fi network both devices join, or, if no Wi-Fi is available, a hotspot hosted by one of the devices — either way, no internet connection is ever required.
 
 ---
 
@@ -9,7 +9,7 @@ Remote Camera is a completely offline, zero-configuration P2P camera viewfinder,
 When shooting photos or recording high-quality videos using mounts, rigs, or tripods, it can be difficult or impossible to monitor the device's screen. 
 
 This application bridges that gap:
-* **Host Offline:** Works in the wilderness or studio over a local Wi-Fi hotspot.
+* **Works Anywhere:** If a Wi-Fi network is already available and reliable, both devices can simply join it. If not — in the wilderness, a studio with no router, etc. — one device can host its own Wi-Fi hotspot instead. Either way, no internet connection is ever needed.
 * **Unified Pipeline:** Multiplexes live video, camera telemetry, control commands, and heavy binary file transfers over a single, robust TCP socket connection.
 * **Camera Roll Sync:** Seamlessly downloads files remotely and drops them directly into the controller device's local camera roll gallery.
 
@@ -65,7 +65,9 @@ All messaging is multiplexed inside the MJPEG stream boundaries (`--frame` multi
 2. No internet connection is needed.
 
 ### Steps:
-1. **Configure Wi-Fi Hotspot:** Turn on the Wi-Fi hotspot on one device (A) and connect the second device (B) to it.
+1. **Get both devices on the same local network:**
+   * **If a Wi-Fi network is available and reliable**, just connect both devices to it — no hotspot needed.
+   * **If no Wi-Fi is available** (remote location, no router, etc.), turn on the Wi-Fi hotspot on one device (A) and connect the second device (B) to it instead.
 2. **Run Server (Device A):**
    * Open the app.
    * Tap **Camera Server**.
