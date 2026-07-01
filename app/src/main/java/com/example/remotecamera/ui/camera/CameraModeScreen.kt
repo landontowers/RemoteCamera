@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LinkOff
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -252,7 +251,7 @@ fun CameraModeScreen(
 
     Spacer(modifier = Modifier.weight(1f))
 
-    // P2P Offline security banner
+    // mDNS broadcast info footer
     Row(
       modifier = Modifier
         .fillMaxWidth()
@@ -260,15 +259,8 @@ fun CameraModeScreen(
       horizontalArrangement = Arrangement.Center,
       verticalAlignment = Alignment.CenterVertically
     ) {
-      Icon(
-        imageVector = Icons.Default.Lock,
-        contentDescription = "Secure P2P",
-        tint = TextSecondary,
-        modifier = Modifier.size(14.dp)
-      )
-      Spacer(modifier = Modifier.width(6.dp))
       Text(
-        text = "mDNS: PoleCameraRemote._tcp offline broadcast",
+        text = "Broadcasting as \"PoleCameraRemote (${android.os.Build.MODEL})\" via mDNS",
         color = TextSecondary,
         fontSize = 11.sp
       )

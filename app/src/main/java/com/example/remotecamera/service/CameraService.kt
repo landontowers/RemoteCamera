@@ -256,7 +256,10 @@ class CameraService : Service(), LifecycleOwner {
             command == "TOGGLE_TORCH" -> {
                 isFlashEnabled = !isFlashEnabled
                 sendFeedbackToClient("TORCH_STATE:$isFlashEnabled")
-                // Toggle torch immediately if a video is currently recording
+                // For photos, flash fires only at the moment of capture (see
+                // takePhoto()'s ImageCapture.flashMode) rather than staying lit as a
+                // torch. A continuous torch is only correct while actively recording,
+                // since a video can't use a discrete per-frame flash pulse.
                 if (activeRecording != null) {
                     ContextCompat.getMainExecutor(this).execute {
                         camera?.cameraControl?.enableTorch(isFlashEnabled)
@@ -343,8 +346,15 @@ class CameraService : Service(), LifecycleOwner {
                 }
 
                 // 1. Viewfinder stream (low latency analysis)
+                // setTargetResolution is only a hint CameraX can ignore entirely; on some
+                // devices/hardware levels it was falling back to a square (1:1) analysis
+                // stream instead of 4:3. ResolutionSelector's AspectRatioStrategy actually
+                // constrains the aspect ratio of the stream CameraX picks.
+                val resolutionSelector = androidx.camera.core.resolutionselector.ResolutionSelector.Builder()
+                    .setAspectRatioStrategy(androidx.camera.core.resolutionselector.AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+                    .build()
                 imageAnalysis = ImageAnalysis.Builder()
-                    .setTargetResolution(android.util.Size(640, 480))
+                    .setResolutionSelector(resolutionSelector)
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
 
@@ -402,38 +412,52 @@ class CameraService : Service(), LifecycleOwner {
             val logicalCameraId = camera2Info.cameraId
             val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
             val characteristics = cameraManager.getCameraCharacteristics(logicalCameraId)
-            
-            // Query logical camera focal lengths
-            val focalLengths = mutableListOf<Float>()
-            val logicalFocalLengths = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
-            if (logicalFocalLengths != null) {
-                focalLengths.addAll(logicalFocalLengths.toList())
-            }
-            
-            // Query physical sub-cameras focal lengths (if any)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                val physicalCameraIds = characteristics.physicalCameraIds
-                for (physicalId in physicalCameraIds) {
-                    val physicalSpecs = cameraManager.getCameraCharacteristics(physicalId)
-                    val lengths = physicalSpecs.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
-                    if (lengths != null) {
-                        focalLengths.addAll(lengths.toList())
-                    }
+
+            // Track (focalLength, sensorWidthMm) pairs rather than bare focal lengths.
+            // A longer focal length on a physically smaller sensor crops further, so raw
+            // focal-length ratios alone understate zoom for lenses with a different sensor
+            // size (e.g. a telephoto lens marketed as "5x" can have a focal length only
+            // ~2.6x the main lens's, with its smaller sensor accounting for the rest).
+            val lensSpecs = mutableListOf<Pair<Float, Float>>()
+
+            fun collectLensSpecs(specs: CameraCharacteristics) {
+                val lengths = specs.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+                val sensorWidth = specs.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)?.width
+                if (lengths != null && sensorWidth != null && sensorWidth > 0f) {
+                    lengths.forEach { lensSpecs.add(it to sensorWidth) }
                 }
             }
-            
-            val uniqueFocalLengths = focalLengths.distinct().sorted()
-            if (uniqueFocalLengths.isNotEmpty()) {
+
+            collectLensSpecs(characteristics)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                for (physicalId in characteristics.physicalCameraIds) {
+                    collectLensSpecs(cameraManager.getCameraCharacteristics(physicalId))
+                }
+            }
+
+            // Keep one sensor width per distinct focal length (the first/primary physical
+            // id for that lens — some devices expose extra binned-resolution variants of
+            // the same lens under separate physical ids with identical focal lengths).
+            val uniqueLensSpecs = lensSpecs.distinctBy { it.first }
+            if (uniqueLensSpecs.isNotEmpty()) {
+                val focalLengths = uniqueLensSpecs.map { it.first }
                 // Baseline standard focal length (normally between 3.5mm and 6.0mm)
-                val baseline = uniqueFocalLengths.firstOrNull { it in 3.5f..6.0f }
-                    ?: uniqueFocalLengths.firstOrNull { it >= 3.0f }
-                    ?: uniqueFocalLengths.first()
-                
-                for (f in uniqueFocalLengths) {
-                    val ratio = f / baseline
-                    // Round to one decimal place, e.g. 0.5, 1.0, 3.0, 5.0, 10.0
+                val baselineFocal = focalLengths.firstOrNull { it in 3.5f..6.0f }
+                    ?: focalLengths.firstOrNull { it >= 3.0f }
+                    ?: focalLengths.first()
+                val baselineSpec = uniqueLensSpecs.first { it.first == baselineFocal }
+                val baselineCropRatio = baselineSpec.first / baselineSpec.second
+
+                for ((focal, sensorWidth) in uniqueLensSpecs) {
+                    val ratio = (focal / sensorWidth) / baselineCropRatio
+                    // Round to one decimal place, e.g. 0.5, 1.0
                     val roundedRatio = Math.round(ratio * 10f) / 10f
-                    if (roundedRatio > 0.1f && !presets.contains(roundedRatio)) {
+                    // Trust this corrected ratio for the main lens and any wider-angle
+                    // lens (ultra-wide), where it's reliably accurate. A longer lens's
+                    // true marketed zoom factor depends on vendor tuning beyond simple
+                    // crop math, so leave that to the digital zoom fallback below,
+                    // which supplies clean round numbers (2x, 5x) instead.
+                    if (roundedRatio in 0.2f..1.05f && !presets.contains(roundedRatio)) {
                         presets.add(roundedRatio)
                     }
                 }
@@ -441,13 +465,13 @@ class CameraService : Service(), LifecycleOwner {
         } catch (e: Exception) {
             Log.e(TAG, "Error calculating physical zoom presets", e)
         }
-        
+
         // Ensure 1.0f is always present
         if (!presets.contains(1.0f)) {
             presets.add(1.0f)
         }
-        
-        // Add helpful digital zoom levels (e.g., 2.0x, 5.0x) if they fit inside bounds and are not covered
+
+        // Add helpful digital/telephoto zoom levels (e.g., 2.0x, 5.0x) if they fit inside bounds and are not covered
         cameraInfo.zoomState.value?.let { state ->
             val maxZoom = state.maxZoomRatio
             if (maxZoom >= 2.0f && presets.none { Math.abs(it - 2.0f) < 0.2f }) {
