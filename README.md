@@ -18,20 +18,21 @@ This application bridges that gap:
 ## Features
 
 ### 1. Remote Viewfinder & Controls
-* **Artifact-Free Viewfinder:** Real-time live viewfinder streaming (upright 3:4 portrait mode) using a custom shifting-window MJPEG parser.
+* **Full-Bleed Viewfinder:** Real-time live viewfinder streaming, fit to the screen width at its true aspect ratio (no stretching or cropping) using a custom shifting-window MJPEG parser, with controls overlaid directly on top of the feed.
+* **Device Picker:** The Controller scans for Camera Servers via mDNS and lists everything it finds — each server broadcasts a friendly name (including device model) so you can tell multiple servers apart and choose exactly which one to pair with, instead of auto-connecting to whichever answers first.
+* **Unified Shutter:** A single contextual shutter button with a Photo/Video mode switch — tap to capture a photo, or start/stop recording depending on mode — with haptic feedback and a shutter-flash animation on capture.
 * **Viewfinder Rotation Calibration:** Cycle local rendering clockwise (`0° -> 90° -> 180° -> 270° -> 0°`) from the controller to adjust for upside-down, sideways, or physical camera rigs.
 * **Dynamic Lens Switching:** Remotely cycle through available physical camera modules (e.g. Main lens, Ultra-Wide, Telephoto, Front camera).
-* **Precise Zoom Slider:** Seamlessly adjust zoom ratio using presets (`0.5x`, `1.0x`, `2.0x`, `5.0x`) that dynamically filter themselves to match the active lens capabilities, alongside a precise manual slider.
-* **Shutter & Recording Control:** Remotely trigger camera capture or start/stop local high-resolution video recordings.
+* **Precise Zoom Slider:** Seamlessly adjust zoom ratio using presets (`0.5x`, `1.0x`, `2.0x`, `5.0x`) that dynamically filter themselves to the active lens's real capabilities — each physical lens's preset is derived from its focal length *and* sensor size, so lenses with a smaller sensor (e.g. a telephoto) report an accurate effective zoom rather than a raw, misleading focal-length ratio.
 
-### 2. Device Telemetry & Torch Control
+### 2. Device Telemetry & Flash Control
 * **Battery & Charge Status:** View the server's battery percentage and charging status (with interactive indicator icons) in real time.
 * **Storage Capacity Meter:** Display the server's free internal storage capacity (e.g. `24.5 GB free`) to prevent running out of space during recordings.
-* **Remote Torch/Flash:** Toggle the camera server's LED flash/torch remotely.
+* **Remote Flash Control:** Toggle flash remotely — fires automatically at the moment of capture while in Photo mode, or functions as a continuous torch while a video is recording.
 
 ### 3. Wireless Offline Media Gallery
 * **Bandwidth Optimization:** Entering the Gallery pauses viewfinder streaming (`PAUSE_STREAM`), allocating 100% of Wi-Fi bandwidth to media indexing and fast file downloads.
-* **Media Indexing:** Reads all captured images/videos stored in `DCIM/RemoteCamera` on the server and lists them with formatted sizes and file types.
+* **Media Indexing:** Reads all captured images/videos stored in `DCIM/RemoteCamera` on the server and lists them in a grid with formatted sizes and file types.
 * **Direct Gallery Downloads:** Raw binary files are streamed directly over the TCP socket, intercepted by the client's parser, and saved using `MediaStore` to the controller's native gallery path (`DCIM/Camera`). Downloader displays real-time progress indicators.
 
 ---
@@ -72,10 +73,10 @@ All messaging is multiplexed inside the MJPEG stream boundaries (`--frame` multi
 3. **Run Controller (Device B):**
    * Open the app.
    * Tap **Controller**.
-   * The app will automatically scan for the mDNS broadcast and connect.
+   * The app scans for Camera Servers via mDNS and lists everything it finds — tap the one you want to connect to.
 4. **Use Controls:**
    * Adjust zoom, change lenses, or rotate the viewfinder to calibrate.
-   * Capture photos or record videos.
+   * Switch between Photo/Video mode and use the shutter button to capture photos or start/stop recording.
    * Tap **Gallery** to download captured media remotely.
 
 ---

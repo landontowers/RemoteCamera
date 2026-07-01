@@ -6,8 +6,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -173,7 +174,7 @@ fun GalleryScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Files List
+        // Files Grid
         if (filteredFiles.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -201,11 +202,13 @@ fun GalleryScreen(
                 }
             }
         } else {
-            LazyColumn(
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
                 items(filteredFiles) { file ->
@@ -213,116 +216,77 @@ fun GalleryScreen(
                     val isCurrentDownloaded = downloadedFiles.contains(file.name)
                     val isVideo = file.mime.startsWith("video/")
 
-                    Card(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .aspectRatio(1f)
                             .clip(RoundedCornerShape(16.dp))
-                            .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(16.dp)),
-                        colors = CardDefaults.cardColors(containerColor = GlassBg)
+                            .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(16.dp))
+                            .background(if (isVideo) NeonPurple.copy(alpha = 0.12f) else NeonCyan.copy(alpha = 0.12f))
+                            .clickable(enabled = !isDownloading && !isCurrentDownloaded) {
+                                downloadingFileName = file.name
+                                controllerConnection.sendCommand("DOWNLOAD_FILE:${file.name}")
+                            }
                     ) {
+                        Icon(
+                            imageVector = if (isVideo) Icons.Default.Videocam else Icons.Default.Image,
+                            contentDescription = "Media Type",
+                            tint = if (isVideo) NeonPurple else NeonCyan,
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .size(36.dp)
+                        )
+
+                        // Metadata caption
                         Row(
                             modifier = Modifier
+                                .align(Alignment.BottomStart)
                                 .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                                .background(Color.Black.copy(alpha = 0.55f))
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
                         ) {
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Thumbnail/Icon
-                                Box(
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(if (isVideo) NeonPurple.copy(alpha = 0.15f) else NeonCyan.copy(alpha = 0.15f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
+                            Text(
+                                text = formatFileSize(file.size),
+                                color = TextSecondary,
+                                fontSize = 10.sp,
+                                maxLines = 1
+                            )
+                        }
+
+                        // Status badge
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(6.dp)
+                                .size(24.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.Black.copy(alpha = 0.55f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            when {
+                                isCurrentDownloading -> {
+                                    CircularProgressIndicator(
+                                        progress = { downloadProgress },
+                                        color = NeonCyan,
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                isCurrentDownloaded -> {
                                     Icon(
-                                        imageVector = if (isVideo) Icons.Default.Videocam else Icons.Default.Image,
-                                        contentDescription = "Media Type",
-                                        tint = if (isVideo) NeonPurple else NeonCyan,
-                                        modifier = Modifier.size(24.dp)
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = "Downloaded",
+                                        tint = Color(0xFF00C853),
+                                        modifier = Modifier.size(16.dp)
                                     )
                                 }
-
-                                Spacer(modifier = Modifier.width(16.dp))
-
-                                // Metadata
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    Text(
-                                        text = file.name,
-                                        color = TextPrimary,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1
+                                else -> {
+                                    Icon(
+                                        imageVector = Icons.Default.Download,
+                                        contentDescription = "Download File",
+                                        tint = TextPrimary,
+                                        modifier = Modifier.size(16.dp)
                                     )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = formatFileSize(file.size),
-                                            color = TextSecondary,
-                                            fontSize = 11.sp
-                                        )
-                                        Text(
-                                            text = "•",
-                                            color = GlassBorder,
-                                            fontSize = 11.sp
-                                        )
-                                        Text(
-                                            text = file.mime.substringAfter("/").uppercase(),
-                                            color = TextSecondary,
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.width(12.dp))
-
-                            // Action Area
-                            Box(
-                                modifier = Modifier.size(40.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                when {
-                                    isCurrentDownloading -> {
-                                        CircularProgressIndicator(
-                                            progress = { downloadProgress },
-                                            color = NeonCyan,
-                                            strokeWidth = 3.dp,
-                                            modifier = Modifier.size(28.dp)
-                                        )
-                                    }
-                                    isCurrentDownloaded -> {
-                                        Icon(
-                                            imageVector = Icons.Default.CheckCircle,
-                                            contentDescription = "Downloaded",
-                                            tint = Color(0xFF00C853),
-                                            modifier = Modifier.size(28.dp)
-                                        )
-                                    }
-                                    else -> {
-                                        IconButton(
-                                            onClick = {
-                                                if (!isDownloading) {
-                                                    downloadingFileName = file.name
-                                                    controllerConnection.sendCommand("DOWNLOAD_FILE:${file.name}")
-                                                }
-                                            },
-                                            enabled = !isDownloading
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Download,
-                                                contentDescription = "Download File",
-                                                tint = if (isDownloading) TextSecondary else TextPrimary
-                                            )
-                                        }
-                                    }
                                 }
                             }
                         }
@@ -338,7 +302,7 @@ fun GalleryScreen(
             instructions = listOf(
                 "Viewfinder streaming is paused to optimize file download transfer rates.",
                 "Browse through all photos and videos captured on the remote camera server.",
-                "Tap the Download icon to save media files directly to your device's local Downloads folder.",
+                "Tap any tile to save that file directly to your device's local Downloads folder.",
                 "Downloaded files display a green checkmark indicating successful local transfer."
             ),
             prefKey = "never_show_gallery_instructions",

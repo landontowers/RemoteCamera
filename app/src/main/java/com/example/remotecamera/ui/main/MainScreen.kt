@@ -186,7 +186,7 @@ fun DashboardScreen(
         letterSpacing = (-0.5).sp
       )
       Text(
-        text = "Privacy-First Peer-to-Peer Streaming",
+        text = "Local Wi-Fi Peer-to-Peer Streaming",
         color = NeonCyan,
         fontSize = 14.sp,
         fontWeight = FontWeight.Medium,
